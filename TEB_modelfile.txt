@@ -1,0 +1,84 @@
+model{
+  for (i in 1:npatients) {
+    
+    y[i] ~ dnorm(mu[i], tau[Module[i]])
+    mu[i] <- beta0[Module[i]] + Trt[i]*beta1[Module[i]]
+  }
+  
+  for (k in 1:ngroups) {
+    for (j in 1:ntreat) {
+      theta[j,k] <- beta0[k] + (1 - equals(j,1))*beta1[k]
+    }
+    # beta1[k] <- theta[2,k] - theta[1,k]
+  }
+  
+  
+  # Priors
+  for (k in 1:ngroups) {
+    beta0[k] <- mu.beta0 + re.beta0[k]
+    re.beta0[k] ~ dnorm(0, prec.re.beta0)
+    
+    tau[k] ~ dgamma(0.5, 0.005)
+  }
+  mu.beta0 ~ dnorm(prior.mu.beta0[1], prec.mu.beta0)
+  prec.mu.beta0 <- pow(prior.mu.beta0[2], -2)
+  
+  prec.re.beta0 <- pow(sigma, -2)
+  sigma ~ dnorm(0, prec.sig)T(0.01, )
+  prec.sig <- pow(prior.sig.HN, -2)
+  
+  # Specify prior values for beta1
+  for (k in 1:ngroups ){
+    for (j in 1:(ntreat-1)) {
+      beta11[j, k] <- prior.beta1[k] + prior.sd.beta1[k]*beta00[j,k] 
+      beta00[j, k] ~ dnorm(0,1)
+    }
+  }
+
+    
+  for (j in 1:ngroups) {
+    
+    for (q in 1:(ngroups*(ntreat-1))) {
+      phiH[q, j] <- sqrt(1/2*pow(sqrt(abs(beta11[TDmodule[q], j])) - sqrt(abs(beta11[TDmodule[q], GDmodule[q]])), 2))
+      norm.phiH[q, j] <- exp(-phiH[q, j]/s0)
+      
+      wss[q, j] <- phiH[q, j] - equals(GDmodule[q], j)
+      
+      D01[q, j] ~ dunif(0, 1)
+      nu0[q, j] <- lSlab + (uSlab - lSlab)*1/(0.00001+wss[q, j])*D01[q, j]
+      nu[q, j] <- nu0[q, j]*step(wss[q, j] - nu0[q, j]) + spike*step(nu0[q, j] - wss[q, j])
+      
+      pred.mu.beta1[q, j] <- beta11[TDmodule[q], j] + cms.mu[q, j]*(1/nu[q, j])*(1 - equals(GDmodule[q], j))
+      cms.mu[q, j] ~ dnorm(0, 1)  
+    }
+    
+  } 
+  # We restart another j loop here
+  for (m in 1:(ngroups*(ntreat-1))) {
+    sum.norm.phiH[m] <- sum(norm.phiH[m, ]) - 1
+  }
+  
+  for (j in 1:ngroups) {
+    
+    for(q in 1:(ngroups*(ntreat-1))){
+      p0[q, j] <- norm.phiH[q, j]/(0.00001+sum.norm.phiH[q])
+      V[q, j] <- 1 - equals(GDmodule[q], j)
+      pmix[q, j] <- inprod(p0[q, j], V[q, j])
+      r.beta1.star[q, j] <- inprod(pmix[q, j], pred.mu.beta1[q, j])
+    }
+  }
+  
+  for (i in 1:ngroups) {
+    beta1[i] <- sum(r.beta1.star[i, ])
+  }
+  
+  #Posterior prediction
+  for (j in 1:ngroups) {
+      pCat[j] <- 1 - step(cutoff.theta[1] - beta1[j])
+
+      pCat2[j] <- 1 - step(cutoff.theta[2] - beta1[j])
+
+  }
+  
+  
+}
