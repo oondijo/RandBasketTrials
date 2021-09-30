@@ -1,0 +1,20 @@
+model{
+  for (i in 1:npatients) {
+    
+    y[i] ~ dnorm(mu[i], tau)
+    mu[i] <- beta0 + Trt[i]*theta
+  }
+
+  # Priors
+  beta0 ~ dnorm(prior.mu.beta0[1], prec.mu.beta0)
+  prec.mu.beta0 <- pow(prior.mu.beta0[2], -2)
+  
+  tau ~ dgamma(0.5, 0.005)
+  
+  theta ~ dnorm(prior.theta, prec.theta)
+  prec.theta <- pow(prior.sd.theta, -2)
+  
+  # prediction of the interval probability 
+  pCat <- 1 - step(cutoff.theta[1] - theta)
+  pCat2 <- 1 - step(cutoff.theta[2] - theta)
+}
